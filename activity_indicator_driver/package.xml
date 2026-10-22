@@ -12,7 +12,7 @@
   <exec_depend>activity_indicator_msgs</exec_depend>
   <!-- board, busio, rainbowio (Adafruit Blinka) and adafruit_seesaw: the LED board over I2C -->
   <exec_depend>python3-adafruit-blinka-pip</exec_depend>
-  <!-- not in the official rosdep database: bmr_system/rosdep/bmr.yaml -->
+  <!-- not in the official rosdep database: bmr_system/deps/rosdep.yaml -->
   <exec_depend>python3-adafruit-circuitpython-seesaw-pip</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
