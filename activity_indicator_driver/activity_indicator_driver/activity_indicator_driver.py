@@ -17,6 +17,7 @@ mapping until called with MODE_AUTO (255), which hands control back to the state
 """
 
 import math
+import os
 import random
 import threading
 import time
@@ -28,8 +29,21 @@ from activity_indicator_msgs.srv import ActivityMode
 
 import board
 import busio
+from adafruit_blinka.microcontroller.generic_linux.i2c import I2C as LinuxI2C
 from rainbowio import colorwheel
 from adafruit_seesaw import seesaw, neopixel
+
+
+class BusI2C(busio.I2C):
+    """busio.I2C on /dev/i2c-<bus_id>, picked by number instead of by pins (what adafruit_extended_bus does).
+    Blinka's pin lookup depends on its board detection; naming the bus does not."""
+
+    def __init__(self, bus_id):  # not busio.I2C.__init__: that looks the bus up by pins
+        if not os.path.exists(f'/dev/i2c-{bus_id}'):
+            raise ValueError(f'/dev/i2c-{bus_id} does not exist')
+        self._i2c = LinuxI2C(bus_id, mode=LinuxI2C.MASTER)  # bus speed comes from the device tree
+        self._lock = threading.RLock()
+
 
 MODE_OFF = 0
 MODE_DISCONNECTED = 1          # kept for compatibility: the "default" state
@@ -61,6 +75,9 @@ class ActivityIndicatorDriver(Node):
         self.declare_parameter('num_pixels', 114)
         self.declare_parameter('neo_pin', 15)
         self.declare_parameter('seesaw_addr', 0x60)
+        # /dev/i2c-<n> the Seesaw is on; -1 = Blinka's default board.SCL/SDA pins. Set per robot in
+        # models/ugvs/<model>/hardware.yaml (Freya: 7 = Jetson 40-pin header pins 3 SDA / 5 SCL).
+        self.declare_parameter('i2c_bus', -1)
         # Frames per second for the render thread. 114 pixels over I2C is the limit here, so
         # this is deliberately modest; raise it only if show() keeps up.
         self.declare_parameter('fps', 15.0)
@@ -93,7 +110,10 @@ class ActivityIndicatorDriver(Node):
         self.gamepad_disconnected_state = gp('gamepad_disconnected_state').value
 
         self.num_pixels = int(gp('num_pixels').value)
-        self.i2c = busio.I2C(board.SCL, board.SDA)
+        bus = int(gp('i2c_bus').value)
+        self.get_logger().info(f"Seesaw 0x{int(gp('seesaw_addr').value):02x} on "
+                               + (f'/dev/i2c-{bus}' if bus >= 0 else "the board's default I2C pins"))
+        self.i2c = BusI2C(bus) if bus >= 0 else busio.I2C(board.SCL, board.SDA)
         self.ss = seesaw.Seesaw(self.i2c, addr=int(gp('seesaw_addr').value))
         self.pixels = neopixel.NeoPixel(
             self.ss, int(gp('neo_pin').value), self.num_pixels,
